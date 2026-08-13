@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DWH Send Event Payload",
+  "description": "Official validation schema for sending data to the DWH",
+  "type": "object",
+  "properties": {
+    "Name": {
+      "description": "Name of the schema",
+      "type": "string",
+      "pattern": "^[\\w]*$"
+    },
+    "Description": {
+      "description": "Short, meaningful description of the schema",
+      "type": "string"
+    },
+    "Content": {
+      "type": "object",
+      "patternProperties": {
+        "^(?!(Type)$)([A-Z][a-z0-9]+)+$": {
+          "$ref": "#/$defs/parameter_node"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LookerAccessGroup": {
+      "description": "Name of the Looker user attribute which is used to restrict access. Will be checked for 'yes' in Looker.",
+      "type": "string"
+    },
+    "additionalProperties": false
+  },
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "Description",
+    "Content"
+  ],
+  "$defs": {
+    "nested_mode": {
+      "$id" : "nested_mode",
+      "properties": {
+        "Mode": {
+          "enum": [
+            "REQUIRED",
+            "NULLABLE"
+          ],
+          "description": "Bigquery column mode.",
+          "example": "REQUIRED"
+        }
+      }
+    },
+    "parameter_node": {
+      "$id": "parameter_node",
+      "type": ["object", "array"],
+      "oneOf": [
+        {
+          "$ref": "simple_parameter"
+        },
+        {
+          "$ref": "nested_parameter"
+        },
+        {
+          "$ref": "repeated_nested_parameter"
+        }
+      ]
+    },
+    "simple_parameter": {
+      "$id" : "simple_parameter",
+      "type": "object",
+      "properties": {
+        "Mode": {
+          "enum": [
+            "REQUIRED",
+            "NULLABLE",
+            "REPEATED"
+          ],
+          "description": "Bigquery column mode.",
+          "example": "REPEATED"
+        },
+        "Description": {
+          "type": "string",
+          "description": "Short but meaningful description of this parameter",
+          "example": "Temperature sensor for measuring room temperature."
+        },
+        "RelevanceForDev": {
+          "type": "boolean",
+          "description": "Is this parameter relevant for developing a product?",
+          "example": true
+        },
+        "Ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "range",
+            "description": "Give named ranges to define boundaries for this parameter",
+            "example": [
+              {
+                "Name": "expected",
+                "Min": 17,
+                "Max": 25
+              },
+              {
+                "Name": "notice",
+                "Min": 25,
+                "Max": 32
+              },
+              {
+                "Name": "watch",
+                "Min": 32,
+                "Max": 39
+              },
+              {
+                "Name": "warning",
+                "Min": 39,
+                "Max": 46
+              },
+              {
+                "Name": "error hot",
+                "Min": 46,
+                "Max": 300
+              },
+              {
+                "Name": "error cold",
+                "Min": -40,
+                "Max": 17
+              }
+            ]
+          }
+        },
+        "Min": {
+          "type": [
+            "number",
+            "integer"
+          ],
+          "description": "Minimum value of this parameter.",
+          "example": -273.15
+        },
+        "Max": {
+          "type": [
+            "number",
+            "integer"
+          ],
+          "description": "Maximum value of this parameter.",
+          "example": 999999
+        },
+        "Frequency": {
+          "type": "string",
+          "description": "Frequency",
+          "example": "each acquisition"
+        },
+        "Unit": {
+          "type": "string",
+          "description": "SI Unit (K, kg, m) or descriptive unit (pixels, digits, ...) of this parameter (if not available, type 'None')",
+          "example": "degree celsius"
+        },
+        "Type": {
+          "enum": [
+            "string",
+            "float",
+            "int",
+            "bool",
+            "timestamp",
+            "enum"
+          ],
+          "description": "Type of the parameter value.",
+          "example": "string"
+        },
+        "Hipaa": {
+          "type": "boolean",
+          "description": "Is this parameter affected by HIPAA (Health Insurance Portability and Accountability Act) restrictions?",
+          "example": false
+        },
+        "Pii": {
+          "type": "boolean",
+          "description": "Does this parameter contain PII (Personally Identifiable Information)?",
+          "example": false
+        },
+        "ProcessingMode": {
+          "type": "string",
+          "enum": [
+            "hash",
+            "drop",
+            "truncate",
+            "pass"
+          ],
+          "description": "Set rule how to process this parameter for central DWH",
+          "example": "hash"
+        },
+        "Enum": {
+          "type": "object",
+          "patternProperties": {
+            "^[\\w]*$": {
+              "type": "number"
+            }
+          },
+          "additionalItems": false
+        },
+        "Responsibility": {
+          "type": "string",
+          "description": "Person/Team responsible for this parameter.",
+          "example": "John Doe/EEA"
+        },
+        "Example": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Example of the parameter, in the form of a string.",
+              "example": "int"
+            },
+            {
+              "type": "number",
+              "description": "Example of the parameter, but as a number.",
+              "example": 42
+            }
+          ]
+        }
+      },
+      "required": [
+        "Description",
+        "Unit",
+        "Type",
+        "Hipaa",
+        "Pii"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ProcessingMode": {
+                "const": "hash"
+              }
+            },
+            "required": [
+              "ProcessingMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "Type": {
+                "not": {
+                  "enum": [
+                    "bool",
+                    "timestamp",
+                    "enum"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "Type"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ProcessingMode": {
+                "const": "truncate"
+              }
+            },
+            "required": [
+              "ProcessingMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "Type": {
+                "const": "timestamp"
+              }
+            },
+            "required": [
+              "Type"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "nested_parameter": {
+      "$id" : "nested_parameter",
+      "type": "object",
+      "patternProperties": {
+        "^(?!(Type)$)([A-Z][a-z0-9]+)+$": {
+          "type": "object",
+          "allOf": [
+            {
+              "$ref": "nested_mode"
+            },
+            {
+              "$ref": "simple_parameter"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "repeated_nested_parameter": {
+      "$id" : "repeated_nested_parameter",
+      "type": "array",
+      "maxItems": 1,
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "patternProperties": {
+          "^(?!(Type)$)([A-Z][a-z0-9]+)+$": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "nested_mode"
+              },
+              {
+                "$ref": "simple_parameter"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "uniqueItems": true
+    },
+    "range": {
+      "$id" : "range",
+      "type": "object",
+      "properties": {
+        "Name": {
+          "type": "string",
+          "description": "Unique range name.",
+          "example": "warning"
+        },
+        "Min": {
+          "type": "number",
+          "description": "Minimum value of range (definition: value is included >=)",
+          "example": 30
+        },
+        "Max": {
+          "type": "number",
+          "description": "Maximum value of range (definition: value is not included <)",
+          "example": 60
+        }
+      },
+      "min_properties": 3,
+      "required": [
+        "Name",
+        "Min",
+        "Max"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,81 @@
+name: Schema Registry Workflow
+
+on:
+  workflow_call:
+    inputs:
+      deploy:
+        description: "Run the deploy stage (merge-to-main path). If false, runs the PR validation stage (make pr_change)."
+        type: boolean
+        default: false
+      pull_request_number:
+        description: "PR number to attach the status check/comment to. Leave empty for push/deploy runs."
+        type: string
+        default: ""
+    secrets:
+      HTTP_API_KEY:
+        description: "GitHub PAT used by report_artifacts.py for commit statuses + PR comments (needs Commit statuses: Read&write, Issues: Read&write)."
+        required: true
+      GAR_SERVICE_ACCOUNT_KEY:
+        description: "JSON key of a GCP service account with Artifact Registry Reader on prj-eqmeaa-dev-agkt, used to pull the ds-schema-registry image."
+        required: true
+      LOOKER_DEPLOY_TOKEN:
+        required: true
+
+jobs:
+  schema-workflow:
+    runs-on: ubuntu-latest
+    container:
+      # Built by dcs_dwh's domain/schema_registry/ds_schema_workflow/Makefile (dev-build
+      # target). Already has Python + requirements.txt + ds-dependency installed.
+      image: europe-west3-docker.pkg.dev/prj-eqmeaa-dev-agkt/ds-schema-registry/ds-schema-registry:v1.0.9
+      credentials:
+        username: _json_key
+        password: ${{ secrets.GAR_SERVICE_ACCOUNT_KEY }}
+      # TODO: confirm GAR_SERVICE_ACCOUNT_KEY exists / this is the intended auth route for
+      # pulling a private Artifact Registry image from Actions - not verified against any
+      # existing GCP setup.
+    permissions:
+      contents: read
+      statuses: write
+      issues: write
+    steps:
+      # SIMULATION NOTE: this repo stands in for DS-DP-S/dwh to test the cross-repo
+      # reusable-workflow call without hitting the org-boundary access restriction (dwh's
+      # reusable-workflow access is currently "none" and EQMEAA-2226 is a personal-account
+      # repo, not inside DS-DP-S). Pipeline scripts are copied in here directly instead of
+      # being checked out from a second repo, since this repo IS the "tooling" repo for
+      # this test. Once validated, the real dwh version keeps its separate
+      # "Checkout pipeline tooling" step pulling live src/ from dwh's own default branch.
+      - name: Checkout schema repo
+        uses: actions/checkout@v4
+
+      - name: Run schema workflow
+        working-directory: domain/schema_registry/ds_schema_workflow/src
+        env:
+          # NOTE: these are the variable names src/Makefile currently reads. A couple of
+          # known mismatches are flagged inline below - not fixed here since that's
+          # Makefile work, not workflow wiring.
+          URL: https://github.com/${{ github.repository }}.git
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          PR_ID: ${{ inputs.pull_request_number }}
+          COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          # TODO: the Makefile currently passes --project_name=$(BITBUCKET_PROJECT) to
+          # report_artifacts.py, but that argument is actually consumed as the GitHub
+          # "owner" (see report_artifacts.py's --project_name, dest="owner"). Pointing
+          # BITBUCKET_PROJECT at the GitHub org here as a stopgap; the Makefile naming
+          # should get cleaned up separately.
+          BITBUCKET_PROJECT: ${{ github.repository_owner }}
+          HTTP_API_KEY: ${{ secrets.HTTP_API_KEY }}
+          JSON_SCHEMA: validation_schema.json
+          GCP_PROJECT: prj-eqmeaa-dev-agkt   # TODO: confirm per-environment project mapping
+          SCHEMA_DATASET: damp_schemas       # TODO: confirm final dataset names
+          RAW_DATASET: damp_raw1_ds_core
+          RAW2_DATASET: damp_raw2_ds_core
+          LOOKER_URL: https://bitbucket.dentsplysirona.com/scm/lok/ds-core-raw.git
+          LOOKER_WEBHOOK_URL: https://dentsplysirona.cloud.looker.com/webhooks/projects/ds-core-raw/deploy/branch/main
+          LOOKER_DEPLOY_TOKEN: ${{ secrets.LOOKER_DEPLOY_TOKEN }}
+          TRIGGER_TOPIC: damp_schema_workflow_table_management
+          TRIGGER_TYPE: ${{ inputs.deploy && 'Deploy' || 'PR' }}
+          EXECUTE_LOOKER: "False"
+        run: make ${{ inputs.deploy && 'deploy' || 'pr_change' }}
