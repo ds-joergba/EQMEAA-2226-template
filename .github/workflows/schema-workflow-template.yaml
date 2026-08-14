@@ -42,15 +42,21 @@ jobs:
       # SIMULATION NOTE: this repo stands in for DS-DP-S/dwh to test the cross-repo
       # reusable-workflow call without hitting the org-boundary access restriction (dwh's
       # reusable-workflow access is currently "none" and EQMEAA-2226 is a personal-account
-      # repo, not inside DS-DP-S). Pipeline scripts are copied in here directly instead of
-      # being checked out from a second repo, since this repo IS the "tooling" repo for
-      # this test. Once validated, the real dwh version keeps its separate
-      # "Checkout pipeline tooling" step pulling live src/ from dwh's own default branch.
+      # repo, not inside DS-DP-S).
       - name: Checkout schema repo
         uses: actions/checkout@v4
 
+      - name: Checkout pipeline tooling (EQMEAA-2226-template)
+        uses: actions/checkout@v4
+        with:
+          # A checkout step always pulls from the CALLING repo (EQMEAA-2226) by default,
+          # even though this workflow file itself lives here - the pipeline scripts need
+          # an explicit second checkout of this repo. No token needed since it's public.
+          repository: ds-joergba/EQMEAA-2226-template
+          path: tooling
+
       - name: Run schema workflow
-        working-directory: domain/schema_registry/ds_schema_workflow/src
+        working-directory: tooling/domain/schema_registry/ds_schema_workflow/src
         env:
           # NOTE: these are the variable names src/Makefile currently reads. A couple of
           # known mismatches are flagged inline below - not fixed here since that's
