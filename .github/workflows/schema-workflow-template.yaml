@@ -13,7 +13,7 @@ on:
         default: ""
     secrets:
       HTTP_API_KEY:
-        description: "GitHub PAT used by report_artifacts.py for commit statuses + PR comments (needs Commit statuses: Read&write, Issues: Read&write)."
+        description: "GitHub PAT used by report_artifacts.py for commit statuses + PR comments (Commit statuses: Read&write, Issues: Read&write), and also embedded in SCHEMA_URL/APIS_URL below for the Makefile's own git clone of both private repos (needs Contents: Read on both EQMEAA-2226 and EQMEAA-2226-apis too)."
         required: true
       GAR_SERVICE_ACCOUNT_KEY:
         description: "JSON key of a GCP service account with Artifact Registry Reader on prj-eqmeaa-dev-agkt, used to pull the ds-schema-registry image."
@@ -58,20 +58,19 @@ jobs:
       - name: Run schema workflow
         working-directory: tooling/domain/schema_registry/ds_schema_workflow/src
         env:
-          # NOTE: these are the variable names src/Makefile currently reads. A couple of
-          # known mismatches are flagged inline below - not fixed here since that's
-          # Makefile work, not workflow wiring.
-          URL: https://github.com/${{ github.repository }}.git
+          # NOTE: these are the variable names src/Makefile currently reads.
+          # The Makefile does its own `git clone $(SCHEMA_URL)`/`$(APIS_URL)` into a fresh
+          # tempdir, separate from this job's own actions/checkout - both target repos are
+          # private, so the token has to be embedded directly in the clone URL here.
+          SCHEMA_URL: https://x-access-token:${{ secrets.HTTP_API_KEY }}@github.com/${{ github.repository }}.git
+          APIS_URL: https://x-access-token:${{ secrets.HTTP_API_KEY }}@github.com/ds-joergba/EQMEAA-2226-apis.git
+          APIS_ROOT_DIR: dwh/dwhsr
+          # Only "dev" has been migrated into the mono-repo so far - hardcoded for this test.
+          REPO_DIR: dev
           BRANCH: ${{ github.head_ref || github.ref_name }}
           PR_ID: ${{ inputs.pull_request_number }}
           COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          REPO_NAME: ${{ github.event.repository.name }}
-          # TODO: the Makefile currently passes --project_name=$(BITBUCKET_PROJECT) to
-          # report_artifacts.py, but that argument is actually consumed as the GitHub
-          # "owner" (see report_artifacts.py's --project_name, dest="owner"). Pointing
-          # BITBUCKET_PROJECT at the GitHub org here as a stopgap; the Makefile naming
-          # should get cleaned up separately.
-          BITBUCKET_PROJECT: ${{ github.repository_owner }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
           HTTP_API_KEY: ${{ secrets.HTTP_API_KEY }}
           JSON_SCHEMA: validation_schema.json
           GCP_PROJECT: prj-eqmeaa-dev-agkt   # TODO: confirm per-environment project mapping
@@ -79,8 +78,6 @@ jobs:
           RAW_DATASET: damp_raw1_ds_core
           RAW2_DATASET: damp_raw2_ds_core
           LOOKER_URL: https://bitbucket.dentsplysirona.com/scm/lok/ds-core-raw.git
-          LOOKER_WEBHOOK_URL: https://dentsplysirona.cloud.looker.com/webhooks/projects/ds-core-raw/deploy/branch/main
-          LOOKER_DEPLOY_TOKEN: ${{ secrets.LOOKER_DEPLOY_TOKEN }}
           TRIGGER_TOPIC: damp_schema_workflow_table_management
           TRIGGER_TYPE: ${{ inputs.deploy && 'Deploy' || 'PR' }}
           EXECUTE_LOOKER: "False"

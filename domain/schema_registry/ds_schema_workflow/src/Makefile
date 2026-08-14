@@ -1,8 +1,5 @@
 .ONESHELL:
 
-include config.mk
-
-
 schema_tempdir:=$(shell mktemp -d)
 DIFF_TARGET := $(if $(filter Deploy,$(TRIGGER_TYPE)),HEAD~1,HEAD)
 GITHUB_REPO_NAME := $(basename $(notdir $(SCHEMA_URL)))
