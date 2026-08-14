@@ -16,7 +16,8 @@ ifneq ($(BRANCH),)
 endif
 	(
 		cd $(schema_tempdir)
-		git clone "$(LOOKER_URL)" ./looker
+# 		git clone "$(LOOKER_URL)" ./looker
+		mkdir ./looker
 		git clone "$(APIS_URL)" ./apis
 	)
 
